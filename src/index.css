@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Design tokens — a calm, white, intentional palette.
+   Offline-friendly type: Segoe UI Variable ships with Windows 11.
+--------------------------------------------------------------------------- */
+@theme {
+  --font-sans: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI",
+    system-ui, -apple-system, sans-serif;
+
+  --color-bg: #ffffff;
+  --color-surface: #fafafa;
+  --color-surface-2: #f4f4f5;
+  --color-border: #ededf0;
+  --color-border-strong: #e0e0e4;
+
+  --color-ink: #18181b;
+  --color-ink-soft: #3f3f46;
+  --color-muted: #8a8a93;
+  --color-faint: #b4b4bb;
+
+  --color-accent: #111113;
+
+  /* Category accents */
+  --color-clothing: #6366f1;
+  --color-jewelry: #d19a2a;
+  --color-shoes: #10b981;
+  --color-accessories: #ec4899;
+
+  /* Status accents */
+  --color-saved: #a1a1aa;
+  --color-ordered: #3b82f6;
+  --color-received: #10b981;
+
+  --radius-card: 18px;
+
+  --shadow-soft: 0 1px 2px rgba(24, 24, 27, 0.04),
+    0 8px 24px -12px rgba(24, 24, 27, 0.12);
+  --shadow-lift: 0 2px 4px rgba(24, 24, 27, 0.05),
+    0 18px 40px -16px rgba(24, 24, 27, 0.22);
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    /* Desktop app: no rubber-band text selection on chrome */
+    user-select: none;
+  }
+
+  /* Allow selecting real content (titles, links, inputs) */
+  input,
+  textarea,
+  a,
+  [data-selectable] {
+    user-select: text;
+  }
+
+  /* Minimal, modern scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #e2e2e6;
+    border-radius: 999px;
+    border: 3px solid var(--color-bg);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #d0d0d6;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
