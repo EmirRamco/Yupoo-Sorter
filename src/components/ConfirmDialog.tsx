@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle } from "lucide-react";
+import { useI18n } from "../lib/i18n";
 
 export interface ConfirmSpec {
   title: string;
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function ConfirmDialog({ spec, onClose }: Props) {
+  const { t } = useI18n();
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -69,7 +71,7 @@ export default function ConfirmDialog({ spec, onClose }: Props) {
                 onClick={onClose}
                 className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--color-ink-soft)] transition hover:bg-[var(--color-surface-2)]"
               >
-                Abbrechen
+                {t("btn.cancel")}
               </button>
               <button
                 type="button"

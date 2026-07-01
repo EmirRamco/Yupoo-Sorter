@@ -23,26 +23,15 @@ export interface AppData {
 
 export const DATA_VERSION = 1;
 
-export const CATEGORIES: { value: Category; label: string }[] = [
-  { value: "clothing", label: "Kleidung" },
-  { value: "jewelry", label: "Schmuck" },
-  { value: "shoes", label: "Schuhe" },
-  { value: "accessories", label: "Accessoires" },
+/** Ordered category/status values. Human labels come from i18n (`cat.*`, `status.*`). */
+export const CATEGORIES: Category[] = [
+  "clothing",
+  "jewelry",
+  "shoes",
+  "accessories",
 ];
 
-export const STATUSES: { value: Status; label: string }[] = [
-  { value: "saved", label: "Gemerkt" },
-  { value: "ordered", label: "Bestellt" },
-  { value: "received", label: "Erhalten" },
-];
-
-export const CATEGORY_LABEL: Record<Category, string> = Object.fromEntries(
-  CATEGORIES.map((c) => [c.value, c.label]),
-) as Record<Category, string>;
-
-export const STATUS_LABEL: Record<Status, string> = Object.fromEntries(
-  STATUSES.map((s) => [s.value, s.label]),
-) as Record<Status, string>;
+export const STATUSES: Status[] = ["saved", "ordered", "received"];
 
 /** Accent color CSS variable name per category (see index.css @theme). */
 export const CATEGORY_COLOR_VAR: Record<Category, string> = {

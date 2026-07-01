@@ -12,6 +12,7 @@ import {
 } from "../lib/types";
 import { fileToThumbnail } from "../lib/image";
 import { fetchAlbum, isYupooUrl } from "../lib/yupoo";
+import { useI18n } from "../lib/i18n";
 
 interface Props {
   /** The item being edited, or null when the panel is closed. */
@@ -68,6 +69,7 @@ function Form({
   onClose: () => void;
   onSave: (item: Item) => void;
 }) {
+  const { t } = useI18n();
   const [title, setTitle] = useState(initial.title);
   const [url, setUrl] = useState(initial.url);
   const [category, setCategory] = useState<Category>(initial.category);
@@ -118,10 +120,8 @@ function Form({
       });
       if (!image && pulled.length > 0) setImage(pulled[0]);
       if (!title.trim() && albumTitle) setTitle(albumTitle);
-    } catch (e) {
-      setGalleryError(
-        typeof e === "string" ? e : "Bilder konnten nicht geladen werden",
-      );
+    } catch {
+      setGalleryError(t("toast.imagesFailed"));
     } finally {
       setLoadingGallery(false);
     }
@@ -153,10 +153,10 @@ function Form({
       <header className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
-            {isNew ? "Neuer Eintrag" : "Bearbeiten"}
+            {isNew ? t("panel.newEntry") : t("panel.edit")}
           </p>
           <h2 className="text-lg font-semibold text-[var(--color-ink)]">
-            {isNew ? "Artikel hinzufügen" : title || "Artikel"}
+            {isNew ? t("panel.addItem") : title || t("panel.item")}
           </h2>
         </div>
         <button
@@ -172,7 +172,7 @@ function Form({
       <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
         {/* Preview */}
         <div>
-          <Label>Vorschau</Label>
+          <Label>{t("panel.preview")}</Label>
           <div className="flex gap-3">
             <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]">
               {image ? (
@@ -186,7 +186,7 @@ function Form({
                     type="button"
                     onClick={() => setImage(null)}
                     className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-black/60 text-white transition hover:bg-black/80"
-                    title="Bild entfernen"
+                    title={t("panel.removeImage")}
                   >
                     <X size={13} />
                   </button>
@@ -207,7 +207,7 @@ function Form({
                 onClick={() => fileRef.current?.click()}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--color-border-strong)] bg-white px-3 py-2 text-sm font-medium text-[var(--color-ink-soft)] transition hover:bg-[var(--color-surface)]"
               >
-                <ImagePlus size={15} /> Bild hochladen
+                <ImagePlus size={15} /> {t("panel.uploadImage")}
               </button>
               <input
                 ref={fileRef}
@@ -220,7 +220,7 @@ function Form({
                 type="url"
                 value={image && !image.startsWith("data:") ? image : ""}
                 onChange={(e) => setImage(e.target.value || null)}
-                placeholder="…oder Bild-URL einfügen"
+                placeholder={t("panel.imageUrl")}
                 className={inputClass}
               />
             </div>
@@ -228,29 +228,29 @@ function Form({
         </div>
 
         {/* Title */}
-        <Field label="Titel">
+        <Field label={t("field.title")}>
           <input
             ref={titleRef}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="z. B. Cargo Hose schwarz"
+            placeholder={t("field.titlePlaceholder")}
             className={inputClass}
           />
         </Field>
 
         {/* URL */}
-        <Field label="Yupoo-Link">
+        <Field label={t("field.url")}>
           <input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://…x.yupoo.com/albums/…"
+            placeholder={t("field.urlPlaceholder")}
             className={inputClass}
           />
         </Field>
 
         {/* Yupoo gallery */}
         <div>
-          <Label>Bilder aus dem Album</Label>
+          <Label>{t("panel.albumImages")}</Label>
           <button
             type="button"
             onClick={loadGallery}
@@ -259,11 +259,12 @@ function Form({
           >
             {loadingGallery ? (
               <>
-                <Loader2 size={15} className="animate-spin" /> Lädt Bilder…
+                <Loader2 size={15} className="animate-spin" />{" "}
+                {t("panel.loadingImages")}
               </>
             ) : (
               <>
-                <DownloadCloud size={15} /> Bilder von Yupoo laden
+                <DownloadCloud size={15} /> {t("panel.loadImages")}
               </>
             )}
           </button>
@@ -291,7 +292,7 @@ function Form({
                       <button
                         type="button"
                         onClick={() => setImage(src)}
-                        title="Als Titelbild wählen"
+                        title={t("panel.pickCover")}
                         className="block h-full w-full"
                       >
                         <img
@@ -308,7 +309,7 @@ function Form({
                       <button
                         type="button"
                         onClick={() => removeFromGallery(src)}
-                        title="Entfernen"
+                        title={t("panel.remove")}
                         className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-white opacity-0 transition hover:bg-black/80 group-hover/tile:opacity-100"
                       >
                         <X size={11} />
@@ -318,16 +319,16 @@ function Form({
                 })}
               </div>
               <p className="mt-2 text-xs text-[var(--color-muted)]">
-                Klick auf ein Bild wählt das Titelbild.
+                {t("panel.coverHint")}
               </p>
             </>
           )}
         </div>
 
         {/* Category */}
-        <Field label="Kategorie">
+        <Field label={t("field.category")}>
           <Segmented
-            options={CATEGORIES}
+            options={CATEGORIES.map((v) => ({ value: v, label: t(`cat.${v}`) }))}
             value={category}
             onChange={setCategory}
             colorOf={(v) => CATEGORY_COLOR_VAR[v]}
@@ -335,9 +336,9 @@ function Form({
         </Field>
 
         {/* Status */}
-        <Field label="Status">
+        <Field label={t("field.status")}>
           <Segmented
-            options={STATUSES}
+            options={STATUSES.map((v) => ({ value: v, label: t(`status.${v}`) }))}
             value={status}
             onChange={setStatus}
             colorOf={(v) => STATUS_COLOR_VAR[v]}
@@ -345,7 +346,7 @@ function Form({
         </Field>
 
         {/* Tags */}
-        <Field label="Tags">
+        <Field label={t("field.tags")}>
           <div className="flex gap-2">
             <input
               value={tagDraft}
@@ -356,7 +357,7 @@ function Form({
                   addTag();
                 }
               }}
-              placeholder="Tag eingeben, Enter drücken"
+              placeholder={t("field.tagPlaceholder")}
               className={inputClass}
             />
             <button
@@ -396,7 +397,7 @@ function Form({
           onClick={onClose}
           className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--color-ink-soft)] transition hover:bg-[var(--color-surface-2)]"
         >
-          Abbrechen
+          {t("btn.cancel")}
         </button>
         <button
           type="button"
@@ -404,7 +405,7 @@ function Form({
           disabled={!canSave}
           className="rounded-lg bg-[var(--color-accent)] px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {isNew ? "Hinzufügen" : "Speichern"}
+          {isNew ? t("btn.add") : t("btn.save")}
         </button>
       </footer>
     </div>

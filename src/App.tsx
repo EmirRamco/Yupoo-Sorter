@@ -1,23 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import type { Update } from "@tauri-apps/plugin-updater";
 import { Check, Plus, PackageOpen, Search, Trash2 } from "lucide-react";
 import Sidebar, { CategoryFilter } from "./components/Sidebar";
 import ItemCard from "./components/ItemCard";
 import AddEditPanel from "./components/AddEditPanel";
 import Lightbox from "./components/Lightbox";
 import ConfirmDialog, { ConfirmSpec } from "./components/ConfirmDialog";
-import {
-  AppData,
-  Category,
-  CATEGORY_LABEL,
-  Item,
-  STATUSES,
-  Status,
-  emptyData,
-} from "./lib/types";
+import TitleBar from "./components/TitleBar";
+import { AppData, Category, Item, STATUSES, Status, emptyData } from "./lib/types";
 import { exportData, importData, loadData, saveData } from "./lib/storage";
 import { fetchAlbum, fetchAlbumTitle, isYupooUrl } from "./lib/yupoo";
+import { checkForUpdate, installUpdate } from "./lib/updater";
+import { useI18n } from "./lib/i18n";
 
 type Sort = "newest" | "oldest" | "title";
 
@@ -37,6 +33,7 @@ function newItem(category: Category): Item {
 }
 
 export default function App() {
+  const { t } = useI18n();
   const [data, setData] = useState<AppData>(emptyData());
   const [loaded, setLoaded] = useState(false);
 
@@ -56,12 +53,19 @@ export default function App() {
     index: number;
   } | null>(null);
   const [enrichingIds, setEnrichingIds] = useState<string[]>([]);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
 
   // Load persisted collection once on startup.
   useEffect(() => {
     loadData()
       .then(setData)
       .finally(() => setLoaded(true));
+  }, []);
+
+  // Silent update check on startup.
+  useEffect(() => {
+    void runUpdateCheck(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-save (debounced) whenever the collection changes after load.
@@ -72,8 +76,8 @@ export default function App() {
       first.current = false;
       return;
     }
-    const t = setTimeout(() => void saveData(data), 400);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => void saveData(data), 400);
+    return () => clearTimeout(timer);
   }, [data, loaded]);
 
   function flash(message: string) {
@@ -115,7 +119,7 @@ export default function App() {
     list = [...list].sort((a, b) => {
       if (showTrash)
         return (b.deletedAt ?? "").localeCompare(a.deletedAt ?? "");
-      if (sort === "title") return a.title.localeCompare(b.title, "de");
+      if (sort === "title") return a.title.localeCompare(b.title);
       const cmp = a.createdAt.localeCompare(b.createdAt);
       return sort === "newest" ? -cmp : cmp;
     });
@@ -144,9 +148,9 @@ export default function App() {
 
   function askDelete(item: Item) {
     setConfirm({
-      title: "In den Papierkorb verschieben?",
-      message: `„${item.title || "Ohne Titel"}" wird in den Papierkorb verschoben und kann dort wiederhergestellt werden.`,
-      confirmLabel: "In Papierkorb",
+      title: t("confirm.trashTitle"),
+      message: t("confirm.trashMsg", { name: item.title || t("card.untitled") }),
+      confirmLabel: t("confirm.trashConfirm"),
       action: () => moveToTrash(item),
     });
   }
@@ -157,7 +161,7 @@ export default function App() {
       items: d.items.filter((i) => i.id !== item.id),
       trash: [{ ...item, deletedAt: new Date().toISOString() }, ...d.trash],
     }));
-    flash("In den Papierkorb verschoben");
+    flash(t("toast.movedToTrash"));
   }
 
   function restore(item: Item) {
@@ -170,34 +174,36 @@ export default function App() {
         items: [rest, ...d.items],
       };
     });
-    flash("Wiederhergestellt");
+    flash(t("toast.restored"));
   }
 
   function askDeleteForever(item: Item) {
     setConfirm({
-      title: "Endgültig löschen?",
-      message: `„${item.title || "Ohne Titel"}" wird dauerhaft gelöscht. Das kann nicht rückgängig gemacht werden.`,
-      confirmLabel: "Endgültig löschen",
+      title: t("confirm.deleteTitle"),
+      message: t("confirm.deleteMsg", {
+        name: item.title || t("card.untitled"),
+      }),
+      confirmLabel: t("confirm.deleteConfirm"),
       danger: true,
       action: () => {
         setData((d) => ({
           ...d,
           trash: d.trash.filter((i) => i.id !== item.id),
         }));
-        flash("Endgültig gelöscht");
+        flash(t("toast.deletedForever"));
       },
     });
   }
 
   function askEmptyTrash() {
     setConfirm({
-      title: "Papierkorb leeren?",
-      message: `Alle ${data.trash.length} Artikel im Papierkorb werden dauerhaft gelöscht.`,
-      confirmLabel: "Papierkorb leeren",
+      title: t("confirm.emptyTitle"),
+      message: t("confirm.emptyMsg", { count: data.trash.length }),
+      confirmLabel: t("confirm.emptyConfirm"),
       danger: true,
       action: () => {
         setData((d) => ({ ...d, trash: [] }));
-        flash("Papierkorb geleert");
+        flash(t("toast.trashEmptied"));
       },
     });
   }
@@ -224,15 +230,16 @@ export default function App() {
       try {
         await openUrl(item.url);
       } catch {
-        flash("Link konnte nicht geöffnet werden");
+        flash(t("toast.linkFailed"));
       }
     } else {
-      flash("Kein Link hinterlegt");
+      flash(t("toast.noLink"));
     }
   }
 
   function openGallery(item: Item) {
-    const imgs = item.images.length > 0 ? item.images : item.image ? [item.image] : [];
+    const imgs =
+      item.images.length > 0 ? item.images : item.image ? [item.image] : [];
     if (imgs.length > 0) setGallery({ images: imgs, index: 0 });
   }
 
@@ -249,7 +256,7 @@ export default function App() {
   function handleSave(item: Item) {
     upsert(item);
     setEditing(null);
-    flash(isNew ? "Artikel hinzugefügt" : "Gespeichert");
+    flash(isNew ? t("toast.added") : t("toast.saved"));
     // Pull title/images from Yupoo in the background so adding stays instant.
     void enrich(item);
   }
@@ -282,7 +289,7 @@ export default function App() {
           );
       }
     } catch {
-      flash("Bilder konnten nicht geladen werden");
+      flash(t("toast.imagesFailed"));
     } finally {
       setEnrichingIds((ids) => ids.filter((id) => id !== item.id));
     }
@@ -291,9 +298,9 @@ export default function App() {
   async function handleExport() {
     try {
       const path = await exportData(data);
-      if (path) flash("Sammlung exportiert");
+      if (path) flash(t("toast.exported"));
     } catch {
-      flash("Export fehlgeschlagen");
+      flash(t("toast.exportFailed"));
     }
   }
 
@@ -302,163 +309,201 @@ export default function App() {
       const imported = await importData();
       if (imported) {
         setData(imported);
-        flash(`${imported.items.length} Artikel importiert`);
+        flash(t("toast.imported", { count: imported.items.length }));
       }
     } catch {
-      flash("Import fehlgeschlagen");
+      flash(t("toast.importFailed"));
+    }
+  }
+
+  // ---- updater ----
+  async function runUpdateCheck(manual: boolean) {
+    if (checkingUpdate) return;
+    setCheckingUpdate(true);
+    try {
+      const update = await checkForUpdate();
+      if (update) {
+        setConfirm({
+          title: t("updater.availableTitle"),
+          message: t("updater.availableMsg", { version: update.version }),
+          confirmLabel: t("updater.install"),
+          action: () => void doInstall(update),
+        });
+      } else if (manual) {
+        flash(t("updater.upToDate"));
+      }
+    } catch {
+      if (manual) flash(t("updater.failed"));
+    } finally {
+      setCheckingUpdate(false);
+    }
+  }
+
+  async function doInstall(update: Update) {
+    flash(t("updater.installing"));
+    try {
+      await installUpdate(update);
+    } catch {
+      flash(t("updater.failed"));
     }
   }
 
   const viewTitle = showTrash
-    ? "Papierkorb"
+    ? t("view.trash")
     : favoritesOnly
-      ? "Favoriten"
+      ? t("view.favorites")
       : category === "all"
-        ? "Alle Artikel"
-        : CATEGORY_LABEL[category];
+        ? t("view.allItems")
+        : t(`cat.${category}`);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-white text-[var(--color-ink)]">
-      <Sidebar
-        active={category}
-        onSelect={(c) => {
-          setCategory(c);
-          setFavoritesOnly(false);
-          setShowTrash(false);
-        }}
-        favoritesOnly={favoritesOnly}
-        onToggleFavorites={() => {
-          setFavoritesOnly((v) => !v);
-          setShowTrash(false);
-        }}
-        trashActive={showTrash}
-        onSelectTrash={() => {
-          setShowTrash(true);
-          setFavoritesOnly(false);
-        }}
-        trashCount={data.trash.length}
-        counts={counts}
-        total={data.items.length}
-        favoritesCount={favoritesCount}
-        onExport={handleExport}
-        onImport={handleImport}
-      />
+    <div className="flex h-screen flex-col overflow-hidden bg-white text-[var(--color-ink)]">
+      <TitleBar />
 
-      <main className="flex flex-1 flex-col overflow-hidden">
-        {/* Toolbar */}
-        <header className="border-b border-[var(--color-border)] px-8 pb-4 pt-6">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-faint)]">
-                Übersicht
-              </p>
-              <h2 className="text-2xl font-semibold tracking-tight">
-                {viewTitle}
-              </h2>
-            </div>
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar
+          active={category}
+          onSelect={(c) => {
+            setCategory(c);
+            setFavoritesOnly(false);
+            setShowTrash(false);
+          }}
+          favoritesOnly={favoritesOnly}
+          onToggleFavorites={() => {
+            setFavoritesOnly((v) => !v);
+            setShowTrash(false);
+          }}
+          trashActive={showTrash}
+          onSelectTrash={() => {
+            setShowTrash(true);
+            setFavoritesOnly(false);
+          }}
+          trashCount={data.trash.length}
+          counts={counts}
+          total={data.items.length}
+          favoritesCount={favoritesCount}
+          onExport={handleExport}
+          onImport={handleImport}
+          onCheckUpdates={() => void runUpdateCheck(true)}
+          checkingUpdate={checkingUpdate}
+        />
 
-            <div className="flex items-center gap-2.5">
-              <div className="relative">
-                <Search
-                  size={16}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-faint)]"
-                />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Suchen…"
-                  className="w-52 rounded-lg border border-[var(--color-border-strong)] bg-white py-2 pl-9 pr-3 text-sm outline-none transition placeholder:text-[var(--color-faint)] focus:border-[var(--color-ink)] focus:ring-4 focus:ring-[var(--color-ink)]/5"
-                />
+        <main className="flex flex-1 flex-col overflow-hidden">
+          {/* Toolbar */}
+          <header className="border-b border-[var(--color-border)] px-8 pb-4 pt-6">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-faint)]">
+                  {t("section.overview")}
+                </p>
+                <h2 className="text-2xl font-semibold tracking-tight">
+                  {viewTitle}
+                </h2>
               </div>
 
-              {showTrash ? (
-                data.trash.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={askEmptyTrash}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-500 transition hover:bg-rose-50"
-                  >
-                    <Trash2 size={16} /> Papierkorb leeren
-                  </button>
-                )
-              ) : (
-                <>
-                  <select
-                    value={sort}
-                    onChange={(e) => setSort(e.target.value as Sort)}
-                    className="cursor-pointer rounded-lg border border-[var(--color-border-strong)] bg-white py-2 pl-3 pr-8 text-sm font-medium text-[var(--color-ink-soft)] outline-none transition focus:border-[var(--color-ink)]"
-                  >
-                    <option value="newest">Neueste zuerst</option>
-                    <option value="oldest">Älteste zuerst</option>
-                    <option value="title">Name (A–Z)</option>
-                  </select>
+              <div className="flex items-center gap-2.5">
+                <div className="relative">
+                  <Search
+                    size={16}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-faint)]"
+                  />
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder={t("toolbar.search")}
+                    className="w-52 rounded-lg border border-[var(--color-border-strong)] bg-white py-2 pl-9 pr-3 text-sm outline-none transition placeholder:text-[var(--color-faint)] focus:border-[var(--color-ink)] focus:ring-4 focus:ring-[var(--color-ink)]/5"
+                  />
+                </div>
 
-                  <button
-                    type="button"
-                    onClick={startAdd}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--shadow-soft)] transition hover:opacity-90"
-                  >
-                    <Plus size={16} /> Hinzufügen
-                  </button>
-                </>
-              )}
+                {showTrash ? (
+                  data.trash.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={askEmptyTrash}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-500 transition hover:bg-rose-50"
+                    >
+                      <Trash2 size={16} /> {t("btn.emptyTrash")}
+                    </button>
+                  )
+                ) : (
+                  <>
+                    <select
+                      value={sort}
+                      onChange={(e) => setSort(e.target.value as Sort)}
+                      className="cursor-pointer rounded-lg border border-[var(--color-border-strong)] bg-white py-2 pl-3 pr-8 text-sm font-medium text-[var(--color-ink-soft)] outline-none transition focus:border-[var(--color-ink)]"
+                    >
+                      <option value="newest">{t("sort.newest")}</option>
+                      <option value="oldest">{t("sort.oldest")}</option>
+                      <option value="title">{t("sort.title")}</option>
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={startAdd}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--shadow-soft)] transition hover:opacity-90"
+                    >
+                      <Plus size={16} /> {t("btn.add")}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Status filter */}
-          {!showTrash && (
-            <div className="mt-4 flex items-center gap-1.5">
-              <FilterPill
-                label="Alle Status"
-                active={statusFilter === "all"}
-                onClick={() => setStatusFilter("all")}
-              />
-              {STATUSES.map((s) => (
+            {/* Status filter */}
+            {!showTrash && (
+              <div className="mt-4 flex items-center gap-1.5">
                 <FilterPill
-                  key={s.value}
-                  label={s.label}
-                  active={statusFilter === s.value}
-                  onClick={() => setStatusFilter(s.value)}
+                  label={t("status.all")}
+                  active={statusFilter === "all"}
+                  onClick={() => setStatusFilter("all")}
                 />
-              ))}
-            </div>
-          )}
-        </header>
-
-        {/* Grid */}
-        <div className="flex-1 overflow-y-auto px-8 py-6">
-          {visible.length === 0 ? (
-            <EmptyState
-              isTrash={showTrash}
-              hasItems={data.items.length > 0}
-              onAdd={startAdd}
-            />
-          ) : (
-            <motion.div
-              layout
-              className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5"
-            >
-              <AnimatePresence mode="popLayout">
-                {visible.map((item) => (
-                  <ItemCard
-                    key={item.id}
-                    item={item}
-                    trashed={showTrash}
-                    enriching={enrichingIds.includes(item.id)}
-                    onEdit={startEdit}
-                    onDelete={askDelete}
-                    onRestore={restore}
-                    onDeleteForever={askDeleteForever}
-                    onToggleFavorite={toggleFavorite}
-                    onOpen={openItem}
-                    onOpenGallery={openGallery}
+                {STATUSES.map((s) => (
+                  <FilterPill
+                    key={s}
+                    label={t(`status.${s}`)}
+                    active={statusFilter === s}
+                    onClick={() => setStatusFilter(s)}
                   />
                 ))}
-              </AnimatePresence>
-            </motion.div>
-          )}
-        </div>
-      </main>
+              </div>
+            )}
+          </header>
+
+          {/* Grid */}
+          <div className="flex-1 overflow-y-auto px-8 py-6">
+            {visible.length === 0 ? (
+              <EmptyState
+                isTrash={showTrash}
+                hasItems={data.items.length > 0}
+                onAdd={startAdd}
+              />
+            ) : (
+              <motion.div
+                layout
+                className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5"
+              >
+                <AnimatePresence mode="popLayout">
+                  {visible.map((item) => (
+                    <ItemCard
+                      key={item.id}
+                      item={item}
+                      trashed={showTrash}
+                      enriching={enrichingIds.includes(item.id)}
+                      onEdit={startEdit}
+                      onDelete={askDelete}
+                      onRestore={restore}
+                      onDeleteForever={askDeleteForever}
+                      onToggleFavorite={toggleFavorite}
+                      onOpen={openItem}
+                      onOpenGallery={openGallery}
+                    />
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </div>
+        </main>
+      </div>
 
       <AddEditPanel
         editing={editing}
@@ -471,9 +516,7 @@ export default function App() {
         images={gallery?.images ?? []}
         index={gallery?.index ?? -1}
         onClose={() => setGallery(null)}
-        onIndexChange={(i) =>
-          setGallery((g) => (g ? { ...g, index: i } : g))
-        }
+        onIndexChange={(i) => setGallery((g) => (g ? { ...g, index: i } : g))}
       />
 
       <ConfirmDialog spec={confirm} onClose={() => setConfirm(null)} />
@@ -530,6 +573,7 @@ function EmptyState({
   onAdd: () => void;
   isTrash?: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -542,17 +586,17 @@ function EmptyState({
         </div>
         <h3 className="text-lg font-semibold">
           {isTrash
-            ? "Papierkorb ist leer"
+            ? t("empty.trashTitle")
             : hasItems
-              ? "Nichts gefunden"
-              : "Noch keine Artikel"}
+              ? t("empty.nothingTitle")
+              : t("empty.noItemsTitle")}
         </h3>
         <p className="mt-1.5 text-sm text-[var(--color-muted)]">
           {isTrash
-            ? "Gelöschte Artikel erscheinen hier und können wiederhergestellt werden."
+            ? t("empty.trashDesc")
             : hasItems
-              ? "Passe Suche oder Filter an, um Artikel zu sehen."
-              : "Füge deinen ersten Yupoo-Link hinzu und behalte den Überblick."}
+              ? t("empty.nothingDesc")
+              : t("empty.noItemsDesc")}
         </p>
         {!hasItems && !isTrash && (
           <button
@@ -560,7 +604,7 @@ function EmptyState({
             onClick={onAdd}
             className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
           >
-            <Plus size={16} /> Artikel hinzufügen
+            <Plus size={16} /> {t("empty.addItem")}
           </button>
         )}
       </div>

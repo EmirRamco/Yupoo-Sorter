@@ -8,13 +8,8 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
-import {
-  CATEGORY_COLOR_VAR,
-  CATEGORY_LABEL,
-  Item,
-  STATUS_COLOR_VAR,
-  STATUS_LABEL,
-} from "../lib/types";
+import { CATEGORY_COLOR_VAR, Item, STATUS_COLOR_VAR } from "../lib/types";
+import { useI18n } from "../lib/i18n";
 
 interface Props {
   item: Item;
@@ -41,6 +36,7 @@ export default function ItemCard({
   onRestore,
   onDeleteForever,
 }: Props) {
+  const { t } = useI18n();
   const catColor = CATEGORY_COLOR_VAR[item.category];
   const hasGallery = item.images.length > 0;
 
@@ -59,7 +55,7 @@ export default function ItemCard({
         <button
           type="button"
           onClick={() => (hasGallery ? onOpenGallery(item) : onOpen(item))}
-          title={hasGallery ? "Galerie ansehen" : "Auf Yupoo öffnen"}
+          title={hasGallery ? t("tooltip.viewGallery") : t("tooltip.openYupoo")}
           className="relative block aspect-[4/3] w-full overflow-hidden bg-[var(--color-surface-2)]"
         >
           {item.image ? (
@@ -80,7 +76,7 @@ export default function ItemCard({
                 className="text-xs font-medium uppercase tracking-[0.2em]"
                 style={{ color: `color-mix(in srgb, ${catColor} 70%, #999)` }}
               >
-                Kein Bild
+                {t("card.noImage")}
               </span>
             </div>
           )}
@@ -94,7 +90,7 @@ export default function ItemCard({
               className="animate-spin text-[var(--color-ink-soft)]"
             />
             <span className="text-[11px] font-medium text-[var(--color-ink-soft)]">
-              Lädt Bilder…
+              {t("card.enriching")}
             </span>
           </div>
         )}
@@ -105,7 +101,9 @@ export default function ItemCard({
             type="button"
             onClick={() => onToggleFavorite(item)}
             title={
-              item.favorite ? "Favorit entfernen" : "Als Favorit markieren"
+              item.favorite
+                ? t("tooltip.favoriteRemove")
+                : t("tooltip.favoriteAdd")
             }
             className="absolute right-2.5 top-2.5 grid h-8 w-8 place-items-center rounded-full bg-white/85 text-[var(--color-muted)] shadow-sm backdrop-blur-sm transition hover:scale-105 hover:text-amber-500"
           >
@@ -123,7 +121,7 @@ export default function ItemCard({
               <button
                 type="button"
                 onClick={() => onRestore?.(item)}
-                title="Wiederherstellen"
+                title={t("tooltip.restore")}
                 className="grid h-8 w-8 place-items-center rounded-full bg-white/85 text-[var(--color-ink-soft)] shadow-sm backdrop-blur-sm transition hover:scale-105 hover:text-emerald-600"
               >
                 <RotateCcw size={15} />
@@ -131,7 +129,7 @@ export default function ItemCard({
               <button
                 type="button"
                 onClick={() => onDeleteForever?.(item)}
-                title="Endgültig löschen"
+                title={t("tooltip.deleteForever")}
                 className="grid h-8 w-8 place-items-center rounded-full bg-white/85 text-[var(--color-ink-soft)] shadow-sm backdrop-blur-sm transition hover:scale-105 hover:text-rose-500"
               >
                 <Trash2 size={15} />
@@ -142,7 +140,7 @@ export default function ItemCard({
               <button
                 type="button"
                 onClick={() => onEdit(item)}
-                title="Bearbeiten"
+                title={t("tooltip.edit")}
                 className="grid h-8 w-8 place-items-center rounded-full bg-white/85 text-[var(--color-ink-soft)] shadow-sm backdrop-blur-sm transition hover:scale-105 hover:text-[var(--color-ink)]"
               >
                 <Pencil size={15} />
@@ -150,7 +148,7 @@ export default function ItemCard({
               <button
                 type="button"
                 onClick={() => onDelete(item)}
-                title="Löschen"
+                title={t("tooltip.delete")}
                 className="grid h-8 w-8 place-items-center rounded-full bg-white/85 text-[var(--color-ink-soft)] shadow-sm backdrop-blur-sm transition hover:scale-105 hover:text-rose-500"
               >
                 <Trash2 size={15} />
@@ -171,10 +169,10 @@ export default function ItemCard({
           <button
             type="button"
             onClick={() => onOpen(item)}
-            title="Auf Yupoo öffnen"
+            title={t("tooltip.openYupoo")}
             className="absolute bottom-2.5 right-2.5 inline-flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-medium text-white opacity-0 backdrop-blur-sm transition hover:bg-black/85 group-hover:opacity-100"
           >
-            <ExternalLink size={12} /> Öffnen
+            <ExternalLink size={12} /> {t("card.open")}
           </button>
         )}
       </div>
@@ -187,7 +185,7 @@ export default function ItemCard({
             style={{ background: catColor }}
           />
           <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
-            {CATEGORY_LABEL[item.category]}
+            {t(`cat.${item.category}`)}
           </span>
         </div>
 
@@ -195,7 +193,7 @@ export default function ItemCard({
           data-selectable
           className="line-clamp-2 text-[15px] font-semibold leading-snug text-[var(--color-ink)]"
         >
-          {item.title || "Ohne Titel"}
+          {item.title || t("card.untitled")}
         </h3>
 
         {item.tags.length > 0 && (
@@ -217,7 +215,7 @@ export default function ItemCard({
             style={{ background: STATUS_COLOR_VAR[item.status] }}
           />
           <span className="text-xs font-medium text-[var(--color-ink-soft)]">
-            {STATUS_LABEL[item.status]}
+            {t(`status.${item.status}`)}
           </span>
         </div>
       </div>
